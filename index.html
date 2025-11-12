@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhisperX API</title>
+    <style>
+        :root {
+            --bg-color: #f8f9fa; --font-color: #212529; --primary-color: #007bff;
+            --primary-hover-color: #0056b3; --border-color: #dee2e6; --card-bg: #ffffff;
+            --input-bg: #ffffff; --disabled-color: #6c757d; --error-color: #dc3545;
+            --success-color: #28a745;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+            margin: 0; padding: 2rem 1rem; background-color: var(--bg-color);
+            color: var(--font-color); display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+        }
+        main { width: 100%; max-width: 1200px; }
+        .container { background-color: var(--card-bg); border-radius: 8px; padding: 2rem; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        h1 { text-align: center; color: var(--font-color); margin-bottom: 2rem; }
+        .form-group { margin-bottom: 1.5rem; }
+        .controls-row { display: flex; gap: 1.5rem; align-items: flex-end; flex-wrap: wrap; }
+        .control-item { flex: 1; min-width: 200px; }
+        label { display: block; font-weight: 600; margin-bottom: 0.5rem; }
+        input[type="text"], select {
+            width: 100%; padding: 0.75rem; border: 1px solid var(--border-color);
+            border-radius: 4px; font-size: 1rem; background-color: var(--input-bg);
+            box-sizing: border-box;
+        }
+        .prompt-help { font-size: 0.875rem; color: var(--disabled-color); margin-top: 0.5rem; display: none; }
+        #drop-zone {
+            border: 2px dashed var(--border-color); border-radius: 8px; padding: 3rem;
+            text-align: center; cursor: pointer; transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+        #drop-zone.drag-over { border-color: var(--primary-color); background-color: #e9f3ff; }
+        #drop-zone p { margin: 0; font-size: 1.1rem; color: var(--disabled-color); }
+        #file-name { font-weight: bold; color: var(--primary-color); margin-top: 0.5rem; }
+        #submit-btn {
+            width: 100%; padding: 0.8rem; font-size: 1.1rem; font-weight: 600;
+            color: #fff; background-color: var(--primary-color); border: none;
+            border-radius: 4px; cursor: pointer; transition: background-color 0.2s ease;
+        }
+        #submit-btn:hover:not(:disabled) { background-color: var(--primary-hover-color); }
+        #submit-btn:disabled { background-color: var(--disabled-color); cursor: not-allowed; }
+        #result-container { margin-top: 2rem; display: none; }
+        textarea {
+            width: 100%; height: 400px; padding: 1rem; border: 1px solid var(--border-color);
+            border-radius: 4px; font-family: "Courier New", Courier, monospace;
+            font-size: 0.95rem; line-height: 1.5; box-sizing: border-box; resize: vertical;
+        }
+        .result-actions { text-align: right; margin-top: 1rem; }
+        #download-btn {
+            padding: 0.6rem 1.2rem; font-size: 1rem; color: #fff;
+            background-color: var(--success-color); border: none; border-radius: 4px; cursor: pointer;
+        }
+        footer {
+            margin-top: 2rem;
+            padding: 1rem;
+            text-align: center;
+            color: var(--disabled-color);
+            font-size: 0.9rem;
+        }
+        footer a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="container">
+            <h1>WhisperX 语音转录UI & API</h1>
+
+            <div class="form-group">
+                <input type="file" id="file-input" accept="audio/*,video/*" style="display: none;">
+                <div id="drop-zone">
+                    <p>点击此处选择文件，或将音频/视频文件拖拽到这里</p>
+                    <p id="file-name"></p>
+                </div>
+            </div>
+            
+            <div class="form-group controls-row">
+                <div class="control-item">
+                    <label for="language">语言</label>
+                    <select id="language"></select>
+                </div>
+                <div class="control-item">
+                    <label for="model">模型</label>
+                    <select id="model">
+                        <option value="large-v3-turbo">large-v3-turbo (推荐)</option>
+                        <option value="large-v3">large-v3</option>
+                        <option value="large-v2">large-v2</option>
+                        <option value="medium">medium</option>
+                        <option value="small">small</option>
+                        <option value="base">base</option>
+                        <option value="tiny">tiny</option>
+                    </select>
+                </div>
+                <div class="control-item" style="flex: 1.5;">
+                    <label for="prompt">提示词 (Prompt)</label>
+                    <input type="text" id="prompt" placeholder="提高特定词汇识别率, 如: OpenAI, WhisperX">
+                </div>
+            </div>
+
+            <button id="submit-btn" disabled>提交转录</button>
+            
+            <div id="result-container">
+                <h2>预览和编辑</h2>
+                <textarea id="srt-output" placeholder="转录结果将显示在这里..."></textarea>
+                <div class="result-actions">
+                    <button id="download-btn">下载 SRT 文件</button>
+                </div>
+            </div>
+        </div>
+    </main>
+    <footer>
+        <p>By <a href="https://github.com/jianchang512/whisperx-api" target="_blank">jianchang512/whisperx-api</a></p>
+    </footer>
+
+    <script>
+        // DOM Elements
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileNameDisplay = document.getElementById('file-name');
+        const languageSelect = document.getElementById('language');
+        const modelSelect = document.getElementById('model');
+        const promptInput = document.getElementById('prompt');
+        const submitBtn = document.getElementById('submit-btn');
+        const resultContainer = document.getElementById('result-container');
+        const srtOutput = document.getElementById('srt-output');
+        const downloadBtn = document.getElementById('download-btn');
+
+        let selectedFile = null;
+
+        const languages = {
+            "auto": "自动检测", "en": "English (英语)", "zh": "Chinese (中文)", "de": "German (德语)", "es": "Spanish (西班牙语)",
+            "ru": "Russian (俄语)", "ko": "Korean (韩语)", "fr": "French (法语)", "ja": "Japanese (日语)", "pt": "Portuguese (葡萄牙语)",
+            "tr": "Turkish (土耳其语)", "pl": "Polish (波兰语)", "ca": "Catalan (加泰罗尼亚语)", "nl": "Dutch (荷兰语)", "ar": "Arabic (阿拉伯语)",
+            "sv": "Swedish (瑞典语)", "it": "Italian (意大利语)", "id": "Indonesian (印尼语)", "hi": "Hindi (印地语)", "fi": "Finnish (芬兰语)",
+            "vi": "Vietnamese (越南语)", "he": "Hebrew (希伯来语)", "uk": "Ukrainian (乌克兰语)", "el": "Greek (希腊语)", "ms": "Malay (马来语)",
+            "cs": "Czech (捷克语)", "ro": "Romanian (罗马尼亚语)", "da": "Danish (丹麦语)", "hu": "Hungarian (匈牙利语)", "ta": "Tamil (泰米尔语)",
+            "no": "Norwegian (挪威语)", "th": "Thai (泰语)", "ur": "Urdu (乌尔都语)", "hr": "Croatian (克罗地亚语)", "bg": "Bulgarian (保加利亚语)",
+            "lt": "Lithuanian (立陶宛语)", "la": "Latin (拉丁语)", "mi": "Maori (毛利语)", "ml": "Malayalam (马拉雅拉姆语)", "cy": "Welsh (威尔士语)",
+            "sk": "Slovak (斯洛伐克语)", "te": "Telugu (泰卢固语)", "fa": "Persian (波斯语)", "lv": "Latvian (拉脱维亚语)", "bn": "Bengali (孟加拉语)",
+            "sr": "Serbian (塞尔维亚语)", "az": "Azerbaijani (阿塞拜疆语)", "sl": "Slovenian (斯洛文尼亚语)", "kn": "Kannada (卡纳达语)", "et": "Estonian (爱沙尼亚语)",
+            "mk": "Macedonian (马其顿语)", "br": "Breton (布列塔尼语)", "eu": "Basque (巴斯克语)", "is": "Icelandic (冰岛语)", "hy": "Armenian (亚美尼亚语)",
+            "ne": "Nepali (尼泊尔语)", "mn": "Mongolian (蒙古语)", "bs": "Bosnian (波斯尼亚语)", "kk": "Kazakh (哈萨克语)", "sq": "Albanian (阿尔巴尼亚语)",
+            "sw": "Swahili (斯瓦希里语)", "gl": "Galician (加利西亚语)", "mr": "Marathi (马拉地语)", "pa": "Punjabi (旁遮普语)", "si": "Sinhala (僧伽罗语)",
+            "km": "Khmer (高棉语)", "sn": "Shona (绍纳语)", "yo": "Yoruba (约鲁巴语)", "so": "Somali (索马里语)", "af": "Afrikaans (南非荷兰语)",
+            "oc": "Occitan (奥克语)", "ka": "Georgian (格鲁吉亚语)", "be": "Belarusian (白俄罗斯语)", "tg": "Tajik (塔吉克语)", "sd": "Sindhi (信德语)",
+            "gu": "Gujarati (古吉拉特语)", "am": "Amharic (阿姆哈拉语)", "yi": "Yiddish (意第绪语)", "lo": "Lao (老挝语)", "uz": "Uzbek (乌兹别克语)",
+            "fo": "Faroese (法罗语)", "ht": "Haitian Creole (海地克里奥尔语)", "ps": "Pashto (普什图语)", "tk": "Turkmen (土库曼语)", "nn": "Nynorsk (新挪威语)",
+            "mt": "Maltese (马耳他语)", "sa": "Sanskrit (梵语)", "lb": "Luxembourgish (卢森堡语)", "my": "Myanmar (Burmese) (缅甸语)", "bo": "Tibetan (藏语)",
+            "tl": "Tagalog (他加禄语)", "mg": "Malagasy (马尔加什语)", "as": "Assamese (阿萨姆语)", "tt": "Tatar (鞑靼语)", "haw": "Hawaiian (夏威夷语)",
+
+            "ln": "Lingala (林加拉语)", "ha": "Hausa (豪萨语)", "ba": "Bashkir (巴什基尔语)", "jw": "Javanese (爪哇语)", "su": "Sundanese (巽他语)"
+        }; // 修正了这里，补上了缺失的 '}'
+
+        function populateLanguages() {
+            for (const [code, name] of Object.entries(languages)) {
+                const option = document.createElement('option');
+                option.value = code === 'auto' ? '' : code;
+                option.textContent = name;
+                languageSelect.appendChild(option);
+            }
+        }
+        
+        // File Handling Logic
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false)
+        });
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        dropZone.addEventListener('dragenter', () => dropZone.classList.add('drag-over'));
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', (e) => {
+            dropZone.classList.remove('drag-over');
+            handleFile(e.dataTransfer.files[0]);
+        });
+
+        function handleFile(file) {
+            if (file) {
+                selectedFile = file;
+                fileNameDisplay.textContent = `已选择文件: ${file.name}`;
+                submitBtn.disabled = false;
+            }
+        }
+
+        // Submission Logic
+        submitBtn.addEventListener('click', async () => {
+            if (!selectedFile) return alert('请先选择一个文件！');
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = '转录中，请稍候...';
+            resultContainer.style.display = 'none';
+            srtOutput.value = '';
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('model', modelSelect.value);
+            if (languageSelect.value) formData.append('language', languageSelect.value);
+            if (promptInput.value) formData.append('prompt', promptInput.value);
+
+            try {
+                const response = await fetch('/v1/audio/transcriptions', { method: 'POST', body: formData });
+                const data = await response.json();
+
+                if (!response.ok) throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                
+                const srtContent = jsonToSrt(data);
+                srtOutput.value = srtContent;
+                resultContainer.style.display = 'block';
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`转录失败: ${error.message}`);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '提交转录';
+            }
+        });
+
+        // Download Logic
+        downloadBtn.addEventListener('click', () => {
+            if (!srtOutput.value) return alert('没有内容可下载！');
+            const blob = new Blob([srtOutput.value], { type: 'text/srt;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${getTimestamp()}.srt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        // Helper Functions
+        function jsonToSrt(data) {
+            return data.segments.map((segment, index) => {
+                const startTime = formatSrtTime(segment.start);
+                const endTime = formatSrtTime(segment.end);
+                const text = segment.text.trim();
+                // speaker 字段现在可能是 null，如果是，则不添加标签
+                const speakerTag = segment.speaker ? `[${segment.speaker}] ` : '';
+                
+                return `${index + 1}\n${startTime} --> ${endTime}\n${speakerTag}${text}\n`;
+            }).join('\n');
+        }
+
+        function formatSrtTime(seconds) {
+            const date = new Date(0);
+            date.setSeconds(seconds);
+            return date.toISOString().substr(11, 12).replace('.', ',');
+        }
+        
+        function getTimestamp() {
+            return new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+        }
+
+        // Initialize
+        populateLanguages();
+    </script>
+</body>
+</html>

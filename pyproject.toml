@@ -1,0 +1,17 @@
+[project]
+name = "wx"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ffmpeg-python>=0.2.0",
+    "flask>=3.1.2",
+    "openai>=2.7.2",
+    "pydub>=0.25.1",
+    "waitress>=3.0.2",
+    "whisperx>=3.7.4",
+]
+
+[[tool.uv.index]]
+url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
