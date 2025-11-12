@@ -27,7 +27,6 @@
     *   **[uv](https://github.com/astral-sh/uv)**: 一个极速的 Python 包管理器。
     *   **[FFmpeg](https://ffmpeg.org/download.html)**: 用于音视频格式转换。
 
-    > ⚠️ **重要提示**: `uv` 和 `ffmpeg` 的安装对于新手可能有点挑战。我们为你准备了一篇超详细的安装指南，请务必参考这篇文章完成安装：**[请在这里替换为你的安装教程文章链接，例如 https://example.com/install-guide]**
 
 3.  **网络环境**:
     *   首次运行时需要从 Hugging Face 下载模型，请确保您的网络可以访问 `huggingface.co`。
