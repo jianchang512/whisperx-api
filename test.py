@@ -47,3 +47,41 @@ token="" # 填写你在 huggingface.co 上具有 Read 权限的 token，去这�
 if __name__=="__main__":
     check_token()
     test_api()
+    
+    
+"""
+# /// script
+# requires-python = "==3.12.*"
+# dependencies = [
+#    "ffmpeg-python>=0.2.0",
+#    "flask>=3.1.2",
+#    "openai>=2.7.2",
+#    "pydub>=0.25.1",
+#    "waitress>=3.0.2",
+#    "whisperx>=3.7.4",
+# ]
+# 
+# [[tool.uv.index]]
+# url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+# [[tool.uv.index]]
+# name = "pytorch-cu128"
+# url = "https://download.pytorch.org/whl/cu128"
+# explicit = true
+#
+# [[tool.uv.index]]
+# name = "pytorch-cpu"
+# url = "https://download.pytorch.org/whl/cpu"
+# explicit = true
+#
+# [tool.uv.sources]
+# torch = [
+#    { index = "pytorch-cu128", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
+#    { index = "pytorch-cpu", marker = "sys_platform == 'darwin'" },  # darwin 为 macOS
+# ]
+# torchaudio = [
+#    { index = "pytorch-cu128", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
+#    { index = "pytorch-cpu", marker = "sys_platform == 'darwin'" },
+# ]
+#
+# ///
+"""    

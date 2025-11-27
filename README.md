@@ -84,6 +84,16 @@ uv run app.py
 
 您可以将此服务作为 OpenAI Whisper API 的本地替代品。
 
+model: tiny|base|small|medium|large-v2|large-v3|large-v3-turbo
+
+response_format: 固定值 diarized_json
+
+extra_body:
+
+	max_speakers: 最大说话人数量，-1:不启用，0:启用说话人并且不限制最大说话人数量，>0:最大说话人数量
+
+	min_speakers: 最小说话人数量，=0:不指定最小说话人数量，>0:最小说话人数量
+
 **示例 Python 代码:**
 
 ```python
@@ -98,7 +108,11 @@ with open(audio_path, "rb") as audio_file:
   transcript = client.audio.transcriptions.create(
     model="large-v3", # 可选 'tiny', 'base', 'large-v3' 等
     file=audio_file,
-    response_format="diarized_json" # 固定值
+    response_format="diarized_json", # 固定值
+	extra_body={
+      "max_speakers": 4, # -1=不启用说话人识别，0=启用说话人并且不指定最大说话人数量，>0=最大说话人数量
+	  "min_speakers": 2  # =0 不指定最小说话人数量，>0=最小说话人数量
+    },
   )
 
 # 打印带说话人信息的字幕片段

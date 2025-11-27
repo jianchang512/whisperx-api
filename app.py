@@ -1,39 +1,3 @@
-# /// script
-# requires-python = "==3.12.*"
-# dependencies = [
-#    "ffmpeg-python>=0.2.0",
-#    "flask>=3.1.2",
-#    "openai>=2.7.2",
-#    "pydub>=0.25.1",
-#    "waitress>=3.0.2",
-#    "whisperx>=3.7.4",
-# ]
-# 
-# [[tool.uv.index]]
-# url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
-# [[tool.uv.index]]
-# name = "pytorch-cu128"
-# url = "https://download.pytorch.org/whl/cu128"
-# explicit = true
-#
-# [[tool.uv.index]]
-# name = "pytorch-cpu"
-# url = "https://download.pytorch.org/whl/cpu"
-# explicit = true
-#
-# [tool.uv.sources]
-# torch = [
-#    { index = "pytorch-cu128", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
-#    { index = "pytorch-cpu", marker = "sys_platform == 'darwin'" },  # darwin 为 macOS
-# ]
-# torchaudio = [
-#    { index = "pytorch-cu128", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
-#    { index = "pytorch-cpu", marker = "sys_platform == 'darwin'" },
-# ]
-#
-# ///
-
-
 
 import os
 import tempfile
@@ -47,6 +11,7 @@ from threading import Timer
 import shutil
 import sys
 import ffmpeg
+from whisperx.diarize import DiarizationPipeline
 
 # --- 全局配置与初始化 ---
 
@@ -103,17 +68,21 @@ def get_whisper_model(model_name: str):
             logging.info(f"模型 '{model_name}' 加载成功。")
         except Exception as e:
             logging.error(f"加载 Whisper 模型 '{model_name}' 失败: {e}")
+            if str(e).find('huggingface'):
+                print(f"\n\n=======可能模型下载失败，请尝试科学上网后再次重试=======\n\n")
             raise
     return whisper_models_cache[model_name]
 
 def get_diarize_model():
     global diarize_model, diarize_model_loaded
+    
+
     if not diarize_model_loaded:
         logging.info("正在尝试加载说话人分离模型...")
         if not HF_TOKEN:
             return None
         try:
-            diarize_model = whisperx.DiarizationPipeline(use_auth_token=HF_TOKEN, device=DEVICE)
+            diarize_model = DiarizationPipeline(use_auth_token=HF_TOKEN, device=DEVICE)
             diarize_model_loaded = True
             logging.info("说话人分离模型加载成功。")
         except Exception as e:
@@ -136,7 +105,8 @@ def audio_transcriptions():
     file = request.files['file']
     if file.filename == '':
         return jsonify({"error": "未选择任何文件"}), 400
-
+    
+    print(request.form)
     model_id = request.form.get('model', DEFAULT_MODEL)
     model_name = 'large-v3' if model_id == 'large-v3-turbo' else model_id
     if model_name not in ALLOWED_MODELS:
@@ -144,6 +114,8 @@ def audio_transcriptions():
     
     language = request.form.get('language') or None
     prompt = request.form.get('prompt')
+    max_speakers=int(request.form.get('max_speakers',-1))
+    min_speakers=int(request.form.get('min_speakers',0))
     
     logging.info(f"收到请求: 模型='{model_id}', 语言='{language or '自动检测'}', 提示词='{'有' if prompt else '无'}'")
 
@@ -184,26 +156,30 @@ def audio_transcriptions():
         if prompt:
             # 使用正确的参数名 'prompt'
             transcribe_options['prompt'] = prompt
-            
+        print('开始转录')
         result = model.transcribe(audio, batch_size=BATCH_SIZE, **transcribe_options)
-        
+        print('转录结束，准备对齐')        
         model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=DEVICE)
         result = whisperx.align(result["segments"], model_a, metadata, audio, DEVICE, return_char_alignments=False)
         
-        diar_model = get_diarize_model()
-        if diar_model:
-            try:
-                diarize_segments = diar_model(audio)
-                result = whisperx.assign_word_speakers(diarize_segments, result)
-            except Exception as e:
-                logging.error(f"说话人分离运行时失败: {e}。将回退到单说话人模式。")
+        if max_speakers>-1:
+            print('进入说话人识别')
+            diar_model = get_diarize_model()
+            if diar_model:
+                try:
+                    diarize_segments = diar_model(audio,max_speakers=max_speakers if max_speakers>0 else None,min_speakers=min_speakers if min_speakers>0 else None)
+                    result = whisperx.assign_word_speakers(diarize_segments, result)
+                except Exception as e:
+                    logging.error(f"说话人分离运行时失败: {e}。将回退到单说话人模式。")
         
         speakers = {segment.get('speaker') for segment in result["segments"] if 'speaker' in segment}
         is_single_speaker = len(speakers) <= 1
         logging.info(f"检测到的说话人: {speakers}。单说话人模式: {'是' if is_single_speaker else '否'}")
 
         speaker_mapping = {f"SPEAKER_{i:02d}": f"Speaker{i+1}" for i in range(20)}
-
+        
+        
+        print(result)
         formatted_segments = []
         for segment in result["segments"]:
             speaker_raw = segment.get("speaker", "SPEAKER_00")
@@ -212,14 +188,16 @@ def audio_transcriptions():
             if not text:
                 continue
 
-            segment_speaker = speaker_name if not is_single_speaker else None
 
-            formatted_segments.append({
+            tmp={
                 "start": segment['start'],
                 "end": segment['end'],
-                "text": text,
-                "speaker": segment_speaker
-            })
+                "text": text
+            }
+            segment_speaker = speaker_name if not is_single_speaker else None
+            if segment_speaker:
+                tmp['speaker']=segment_speaker
+            formatted_segments.append(tmp)
         
         response_data = {"segments": formatted_segments}
         return jsonify(response_data)
@@ -255,7 +233,6 @@ if __name__ == '__main__':
     host = '127.0.0.1'
     port = 9092
     url = f"http://{host}:{port}"
-    get_diarize_model()
     Timer(1, lambda: open_browser(url)).start()
     logging.info(f"服务已启动，正在监听 http://{host}:{port}")
     serve(app, host=host, port=port, threads=10)
